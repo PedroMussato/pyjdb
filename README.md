@@ -173,6 +173,3 @@ curl http://127.0.0.1:8000/item/ns1/doc1/user
 * Uses file-level locking (`filelock`)
 * Prevents simultaneous read/write corruption
 * Lock granularity: per document file
-
-Isso muda completamente performance e confiabilidade.
-```
