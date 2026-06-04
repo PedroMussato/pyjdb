@@ -1,28 +1,34 @@
+
 # PyJDB
 
-Lightweight file-based document storage with a minimal HTTP API.
+A lightweight file-based NoSQL database exposed via HTTP API.
 
-The system exposes a simple namespace/document abstraction over the local filesystem with concurrency protection via file locks.
+It implements a minimal document store where each document is a JSON file and each document contains key-value pairs (items).
 
 ---
 
-## Architecture
+## Core Concept
 
-- Namespace = directory
-- Document = file
-- Content = raw text
-- Concurrency control = file-level lock (`filelock`)
+The system follows a simple hierarchy:
+
+namespace → document → JSON key-value store
+
+### Mapping
+
+- Namespace → directory
+- Document → JSON file
+- Item → key inside JSON
 
 ---
 
 ## Features
 
-- Create / delete namespaces
-- Create / delete documents
-- Read / write document content
-- File locking to prevent concurrent write corruption
-- Minimal FastAPI HTTP layer
-- Local filesystem persistence
+- Create document automatically via API
+- Write key-value pairs into JSON documents
+- Read individual keys from documents
+- Automatic file creation if missing
+- File-level locking for safe concurrent access
+- Minimal FastAPI HTTP interface
 
 ---
 
@@ -32,25 +38,25 @@ The system exposes a simple namespace/document abstraction over the local filesy
 - FastAPI
 - Uvicorn
 - Filelock
-- Pytest
+- Pytest (testing)
 
 ---
 
 ## Installation
 
 ```bash
-pip3 install -r requirements.txt
-```
+pip install fastapi uvicorn filelock pytest
+````
 
 ---
 
-## Run API Server
+## Running the API
 
 ```bash
-uvicorn api:app --reload
+uvicorn pyjdb:app --reload
 ```
 
-Server runs on:
+Server runs at:
 
 ```
 http://127.0.0.1:8000
@@ -58,90 +64,115 @@ http://127.0.0.1:8000
 
 ---
 
-## API Endpoints
+## Data Model
 
-### Namespace
+Each document is stored as a JSON file:
 
-Create namespace:
-
-```
-POST /namespace/{root_dir}/{namespace}
-```
-
-Delete namespace:
-
-```
-DELETE /namespace/{root_dir}/{namespace}
-```
-
----
-
-### Document
-
-Create document:
-
-```
-POST /document/{root_dir}/{namespace}/{document}
-```
-
-Read document:
-
-```
-GET /document/{root_dir}/{namespace}/{document}
-```
-
-Write document:
-
-```
-PUT /document/{root_dir}/{namespace}/{document}
-Body:
+```json
 {
-  "content": "string"
+  "key1": "value1",
+  "key2": "value2"
 }
 ```
 
-Delete document:
+---
+
+## API Endpoints
+
+### Create Document
+
+Creates an empty JSON document if it does not exist.
 
 ```
-DELETE /document/{root_dir}/{namespace}/{document}
+POST /document/{namespace}/{document}
 ```
 
 ---
 
-## Example Usage (curl)
+### Write Item (Upsert)
 
-### Create namespace
+Creates or updates a key inside a document.
 
-```bash
-curl -X POST http://127.0.0.1:8000/namespace/data/ns1
+```
+POST /item/{namespace}/{document}/{key}
 ```
 
-### Write document
+Request body:
+
+```json
+{
+  "value": "any JSON serializable value"
+}
+```
+
+Behavior:
+
+* If key exists → overwrite
+* If key does not exist → create
+
+---
+
+### Read Item
+
+Reads a key from a document.
+
+```
+GET /item/{namespace}/{document}/{key}
+```
+
+Response:
+
+```json
+{
+  "key": "key1",
+  "value": "value1"
+}
+```
+
+If key does not exist:
+
+```json
+{
+  "key": "missing",
+  "value": null
+}
+```
+
+---
+
+## Example Usage
+
+### Create document
 
 ```bash
-curl -X PUT http://127.0.0.1:8000/document/data/ns1/file.txt \
+curl -X POST http://127.0.0.1:8000/document/ns1/doc1
+```
+
+---
+
+### Write item
+
+```bash
+curl -X POST http://127.0.0.1:8000/item/ns1/doc1/user \
   -H "Content-Type: application/json" \
-  -d '{"content":"hello world"}'
-```
-
-### Read document
-
-```bash
-curl http://127.0.0.1:8000/document/data/ns1/file.txt
-```
-
-### Delete document
-
-```bash
-curl -X DELETE http://127.0.0.1:8000/document/data/ns1/file.txt
+  -d '{"value": {"name": "Pedro"}}'
 ```
 
 ---
 
-## Running Tests
-
-### API + storage tests
+### Read item
 
 ```bash
-pytest -vv
+curl http://127.0.0.1:8000/item/ns1/doc1/user
+```
+
+---
+
+## Concurrency Model
+
+* Uses file-level locking (`filelock`)
+* Prevents simultaneous read/write corruption
+* Lock granularity: per document file
+
+Isso muda completamente performance e confiabilidade.
 ```
