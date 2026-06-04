@@ -45,8 +45,8 @@ namespace → document → JSON key-value store
 ## Installation
 
 ```bash
-pip install fastapi uvicorn filelock pytest
-````
+pip3 install -r requirements.txt
+```
 
 ---
 
