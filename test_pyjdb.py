@@ -1,68 +1,58 @@
-import pytest
+from fastapi.testclient import TestClient
+from pyjdb import app
 from pathlib import Path
-from pyjdb import (
-    create_namespace,
-    delete_namespace,
-    create_document,
-    delete_document,
-    read_document,
-    write_document,
-)
+import pytest
 
 
-@pytest.fixture
-def tmp_root(tmp_path):
-    # Temporary isolated filesystem root for each test
-    return tmp_path
+client = TestClient(app)
+
+ROOT = "data"
 
 
-def test_create_namespace(tmp_root):
-    create_namespace(tmp_root, "ns1")
+@pytest.fixture(autouse=True)
+def cleanup():
+    path = Path(ROOT)
 
-    assert (tmp_root / "ns1").exists()
-    assert (tmp_root / "ns1").is_dir()
+    if path.exists():
+        for p in sorted(path.rglob("*"), reverse=True):
+            if p.is_file():
+                p.unlink()
+            elif p.is_dir():
+                p.rmdir()
+        path.rmdir()
 
+    yield
 
-def test_create_document(tmp_root):
-    create_document(tmp_root, "ns1", "doc1.txt")
-
-    path = tmp_root / "ns1" / "doc1.txt"
-    assert path.exists()
-    assert path.is_file()
-
-
-def test_write_and_read_document(tmp_root):
-    write_document(tmp_root, "ns1", "doc1.txt", "hello")
-
-    content = read_document(tmp_root, "ns1", "doc1.txt")
-    assert content == "hello"
-
-
-def test_overwrite_document(tmp_root):
-    write_document(tmp_root, "ns1", "doc1.txt", "a")
-    write_document(tmp_root, "ns1", "doc1.txt", "b")
-
-    assert read_document(tmp_root, "ns1", "doc1.txt") == "b"
+    if path.exists():
+        for p in sorted(path.rglob("*"), reverse=True):
+            if p.is_file():
+                p.unlink()
+            elif p.is_dir():
+                p.rmdir()
+        path.rmdir()
 
 
-def test_delete_document(tmp_root):
-    write_document(tmp_root, "ns1", "doc1.txt", "data")
+def test_create_document_and_write_read():
+    client.post("/document/ns1/doc1")
 
-    delete_document(tmp_root, "ns1", "doc1.txt")
+    r = client.post("/item/ns1/doc1/key1", json={"value": "hello"})
+    assert r.status_code == 200
 
-    assert not (tmp_root / "ns1" / "doc1.txt").exists()
-
-
-def test_delete_namespace(tmp_root):
-    write_document(tmp_root, "ns1", "doc1.txt", "data")
-    write_document(tmp_root, "ns1", "doc2.txt", "data")
-
-    delete_namespace(tmp_root, "ns1")
-
-    assert not (tmp_root / "ns1").exists()
+    r = client.get("/item/ns1/doc1/key1")
+    assert r.json()["value"] == "hello"
 
 
-def test_read_missing_document(tmp_root):
-    result = read_document(tmp_root, "ns1", "missing.txt")
+def test_overwrite_item():
+    client.post("/document/ns1/doc1")
 
-    assert result is None
+    client.post("/item/ns1/doc1/key1", json={"value": "a"})
+    client.post("/item/ns1/doc1/key1", json={"value": "b"})
+
+    assert client.get("/item/ns1/doc1/key1").json()["value"] == "b"
+
+
+def test_missing_key():
+    client.post("/document/ns1/doc1")
+
+    r = client.get("/item/ns1/doc1/does_not_exist")
+    assert r.json()["value"] is None
