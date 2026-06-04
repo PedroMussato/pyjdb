@@ -1,67 +1,106 @@
+import json
 from pathlib import Path
 from filelock import FileLock
+from fastapi import FastAPI
+from pydantic import BaseModel
 
 
-def create_namespace(root_dir, namespace):
-    # Ensure the namespace directory exists
-    path = Path(root_dir) / namespace
-    path.mkdir(parents=True, exist_ok=True)
+# -------------------------
+# CONFIG
+# -------------------------
+
+ROOT = "data"
+
+app = FastAPI()
 
 
-def delete_namespace(root_dir, namespace):
-    # Remove a namespace directory and its files (non-recursive safety)
-    path = Path(root_dir) / namespace
+# -------------------------
+# INTERNAL STORAGE LAYER
+# -------------------------
 
-    if path.exists() and path.is_dir():
-        # Delete all files inside the directory first
-        for file in path.iterdir():
-            if file.is_file():
-                file.unlink()
-
-        # Remove the empty directory
-        path.rmdir()
+def _path(namespace: str, document: str):
+    return Path(ROOT) / namespace / f"{document}.json"
 
 
-def create_document(root_dir, namespace, document):
-    # Ensure namespace exists before creating document
-    dir_path = Path(root_dir) / namespace
-    dir_path.mkdir(parents=True, exist_ok=True)
+def _load(path: Path):
+    if not path.exists():
+        return {}
 
-    # Create an empty file if it does not exist
-    file_path = dir_path / document
-    file_path.touch(exist_ok=True)
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
 
 
-def delete_document(root_dir, namespace, document):
-    file_path = Path(root_dir) / namespace / document
+def _save(path: Path, data: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8"
+    )
 
-    # File-level lock to avoid race conditions during deletion
-    lock = FileLock(str(file_path) + ".lock")
+
+def _lock(path: Path):
+    return FileLock(str(path) + ".lock")
+
+
+# -------------------------
+# CORE DB FUNCTIONS
+# -------------------------
+
+def write_item(namespace: str, document: str, key: str, value):
+    path = _path(namespace, document)
+    lock = _lock(path)
+
     with lock:
-        if file_path.exists():
-            file_path.unlink()
+        data = _load(path)
+        data[key] = value
+        _save(path, data)
 
 
-def read_document(root_dir, namespace, document):
-    file_path = Path(root_dir) / namespace / document
+def read_item(namespace: str, document: str, key: str):
+    path = _path(namespace, document)
+    lock = _lock(path)
 
-    # Lock ensures no concurrent write during read
-    lock = FileLock(str(file_path) + ".lock")
     with lock:
-        if not file_path.exists():
-            return None
-
-        return file_path.read_text(encoding="utf-8")
+        data = _load(path)
+        return data.get(key)
 
 
-def write_document(root_dir, namespace, document, content):
-    file_path = Path(root_dir) / namespace / document
+# -------------------------
+# API MODELS
+# -------------------------
 
-    # Ensure directory exists before writing file
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+class ItemRequest(BaseModel):
+    value: object
 
-    # Lock prevents concurrent read/write corruption
-    lock = FileLock(str(file_path) + ".lock")
-    with lock:
-        # Atomic overwrite of file content
-        file_path.write_text(content, encoding="utf-8")
+
+# -------------------------
+# API ENDPOINTS
+# -------------------------
+
+@app.post("/item/{namespace}/{document}/{key}")
+def api_write_item(namespace: str, document: str, key: str, body: ItemRequest):
+    write_item(namespace, document, key, body.value)
+    return {"status": "ok", "action": "write"}
+
+
+@app.get("/item/{namespace}/{document}/{key}")
+def api_read_item(namespace: str, document: str, key: str):
+    value = read_item(namespace, document, key)
+    return {"key": key, "value": value}
+
+
+# -------------------------
+# OPTIONAL: document init endpoint
+# -------------------------
+
+@app.post("/document/{namespace}/{document}")
+def create_document(namespace: str, document: str):
+    path = _path(namespace, document)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not path.exists():
+        _save(path, {})
+
+    return {"status": "created"}
