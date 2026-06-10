@@ -72,6 +72,8 @@ http://127.0.0.1:8000
 
 All requests (except optional health endpoints) require authentication.
 
+### THE KEY PRESENT IN THE LOAD TEST AND THE SHA PRESENT IN THE KEYS.TXT FILE IN THIS REPO IS JUST AN EXAMPLE CHANGE IT FOR PRODUCTION ENVIRONMENTS.
+
 ### Flow
 
 * Client sends a Bearer token (UUID)
