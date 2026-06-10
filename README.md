@@ -76,7 +76,7 @@ All requests (except optional health endpoints) require authentication.
 
 * Client sends a Bearer token (UUID)
 * Server computes SHA256(token)
-* Server checks if hash exists in `keys.txt`
+* Server checks if hash exists in `config/keys.txt`
 * If found → request allowed
 * If not found → request rejected
 
