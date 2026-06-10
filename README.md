@@ -46,6 +46,38 @@ namespace → document → JSON key-value store
 
 ---
 
+## Benchmark on my machine with docker (macbook air m3)
+```
+============================================================
+LOAD TEST RESULTS
+============================================================
+Duration:              68.02s
+Concurrent Workers:    100
+Total Requests:        34740
+Requests/sec:          510.75
+Error Rate:            0.00%
+
+Operations:
+  POST       11580
+  GET        11580
+  DELETE     11580
+
+Latency (ms)
+  Min:      2.13
+  Avg:      189.58
+  Median:   144.83
+  P90:      337.39
+  P95:      436.37
+  P99:      668.46
+  Max:      1964.77
+
+Status Codes:
+  200: 34740
+============================================================
+```
+
+---
+
 ## Installation
 
 ```bash
