@@ -1,9 +1,8 @@
-
 # PyJDB
 
 A lightweight file-based NoSQL database exposed via HTTP API.
 
-It implements a minimal document store where each document is a JSON file and each document contains key-value pairs (items).
+It implements a minimal document store where each document is a JSON file and each document contains key-value pairs (items). Access is protected by a simple SHA256-based allowlist authentication mechanism.
 
 ---
 
@@ -11,34 +10,39 @@ It implements a minimal document store where each document is a JSON file and ea
 
 The system follows a simple hierarchy:
 
+```
 namespace → document → JSON key-value store
+```
 
 ### Mapping
 
-- Namespace → directory
-- Document → JSON file
-- Item → key inside JSON
+* Namespace → directory
+* Document → JSON file
+* Item → key inside JSON object
 
 ---
 
 ## Features
 
-- Create document automatically via API
-- Write key-value pairs into JSON documents
-- Read individual keys from documents
-- Automatic file creation if missing
-- File-level locking for safe concurrent access
-- Minimal FastAPI HTTP interface
+* File-based document storage (JSON per document)
+* Write key-value pairs into documents (upsert behavior)
+* Read individual keys from documents
+* Delete keys from documents
+* Automatic document creation on first write (lazy creation)
+* File-level locking per document for write safety
+* Simple Bearer token authentication via SHA256 allowlist
+* Minimal FastAPI HTTP interface
+* No external database dependencies
 
 ---
 
 ## Tech Stack
 
-- Python 3.10+
-- FastAPI
-- Uvicorn
-- Filelock
-- Pytest (testing)
+* Python 3.10+
+* FastAPI
+* Uvicorn
+* Filelock
+* Pydantic
 
 ---
 
@@ -64,6 +68,35 @@ http://127.0.0.1:8000
 
 ---
 
+## Authentication Model
+
+All requests (except optional health endpoints) require authentication.
+
+### Flow
+
+* Client sends a Bearer token (UUID)
+* Server computes SHA256(token)
+* Server checks if hash exists in `keys.txt`
+* If found → request allowed
+* If not found → request rejected
+
+### Example header
+
+```http
+Authorization: Bearer <uuid-token>
+```
+
+### keys.txt format
+
+Each line contains one SHA256 hash:
+
+```
+9b74c9897bac770ffc029102a200c5de...
+2c26b46b68ffc68ff99b453c1d304134...
+```
+
+---
+
 ## Data Model
 
 Each document is stored as a JSON file:
@@ -78,14 +111,6 @@ Each document is stored as a JSON file:
 ---
 
 ## API Endpoints
-
-### Create Document
-
-Creates an empty JSON document if it does not exist.
-
-```
-POST /document/{namespace}/{document}
-```
 
 ---
 
@@ -107,8 +132,9 @@ Request body:
 
 Behavior:
 
-* If key exists → overwrite
-* If key does not exist → create
+* If key exists → overwrite value
+* If key does not exist → create key
+* If document does not exist → created implicitly
 
 ---
 
@@ -140,13 +166,22 @@ If key does not exist:
 
 ---
 
-## Example Usage
+### Delete Item
 
-### Create document
+Removes a key from a document.
 
-```bash
-curl -X POST http://127.0.0.1:8000/document/ns1/doc1
 ```
+DELETE /item/{namespace}/{document}/{key}
+```
+
+Behavior:
+
+* If key exists → removed
+* If key does not exist → no-op
+
+---
+
+## Example Usage
 
 ---
 
@@ -154,6 +189,7 @@ curl -X POST http://127.0.0.1:8000/document/ns1/doc1
 
 ```bash
 curl -X POST http://127.0.0.1:8000/item/ns1/doc1/user \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"value": {"name": "Pedro"}}'
 ```
@@ -163,13 +199,34 @@ curl -X POST http://127.0.0.1:8000/item/ns1/doc1/user \
 ### Read item
 
 ```bash
-curl http://127.0.0.1:8000/item/ns1/doc1/user
+curl http://127.0.0.1:8000/item/ns1/doc1/user \
+  -H "Authorization: Bearer <token>"
+```
+
+---
+
+### Delete item
+
+```bash
+curl -X DELETE http://127.0.0.1:8000/item/ns1/doc1/user \
+  -H "Authorization: Bearer <token>"
 ```
 
 ---
 
 ## Concurrency Model
 
-* Uses file-level locking (`filelock`)
-* Prevents simultaneous read/write corruption
+* File-level locking per document
+* Prevents concurrent write corruption
+* Reads are also locked to avoid reading inconsistent write states
 * Lock granularity: per document file
+
+---
+
+## Security Model
+
+* Stateless authentication
+* SHA256-based token validation
+* Allowlist stored in `keys.txt`
+* No token generation endpoint exposed
+* No dynamic key issuance via API
