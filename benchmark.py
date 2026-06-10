@@ -11,7 +11,8 @@ NS = "ns1"
 DOC = "doc1"
 
 DURATION = 60
-CONCURRENT_WORKERS = 100
+CONCURRENT_WORKERS = 200
+TIMEOUT = 1 
 
 latencies = []
 status_codes = Counter()
@@ -124,7 +125,7 @@ async def main():
         ttl_dns_cache=300
     )
 
-    timeout = aiohttp.ClientTimeout(total=30)
+    timeout = aiohttp.ClientTimeout(total=TIMEOUT)
 
     headers = {
         "Authorization": f"Bearer {TOKEN}"
