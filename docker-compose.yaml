@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  pyjdb:
+    build: .
+    container_name: pyjdb
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+    # restart-safe
+    restart: unless-stopped
+
+    # persistency
+    volumes:
+      # database files (namespace/document JSONs)
+      - ./db_data/:/app/data
+
+      # auth keys allowlist
+      - ./db_config/:/app/config
+
+    working_dir: /app
