@@ -13,7 +13,7 @@ from pydantic import BaseModel
 ROOT = "data"
 
 # File containing allowed authentication tokens (SHA256 hashes)
-KEYS_FILE = Path("keys.txt")
+KEYS_FILE = Path("config/keys.txt")
 
 # FastAPI application instance
 app = FastAPI()
