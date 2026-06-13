@@ -61,10 +61,6 @@ async def auth_middleware(request: Request, call_next):
     Blocks all requests except explicitly allowed ones.
     """
 
-    # Allow public endpoints (optional)
-    if request.url.path in ["/health"]:
-        return await call_next(request)
-
     # Extract Authorization header
     auth = request.headers.get("authorization")
 
