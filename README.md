@@ -51,28 +51,29 @@ namespace → document → JSON key-value store
 ============================================================
 LOAD TEST RESULTS
 ============================================================
-Duration:              68.02s
+Duration:              63.49s
 Concurrent Workers:    100
-Total Requests:        34740
-Requests/sec:          510.75
-Error Rate:            0.00%
+Total Requests:        61740
+Requests/sec:          972.46
+Error Rate:            0.09%
 
 Operations:
-  POST       11580
-  GET        11580
-  DELETE     11580
+  POST       20580
+  GET        20580
+  DELETE     20580
 
 Latency (ms)
-  Min:      2.13
-  Avg:      189.58
-  Median:   144.83
-  P90:      337.39
-  P95:      436.37
-  P99:      668.46
-  Max:      1964.77
+  Min:      1.18
+  Avg:      100.62
+  Median:   62.37
+  P90:      213.81
+  P95:      320.00
+  P99:      581.23
+  Max:      1000.68
 
 Status Codes:
-  200: 34740
+  200: 61682
+  EXCEPTION: 58
 ============================================================
 ```
 
@@ -120,16 +121,82 @@ All requests (except optional health endpoints) require authentication.
 Authorization: Bearer <uuid-token>
 ```
 
-### keys.txt format
+# auth.json format
 
-Each line contains one SHA256 hash:
+Authentication data is stored in a JSON file keyed by **SHA256(token)**.
 
-```
-9b74c9897bac770ffc029102a200c5de...
-2c26b46b68ffc68ff99b453c1d304134...
+Each key maps to a permission + namespace policy.
+
+```json
+{
+  "b62f95843bdc08c0ddaca9ca43f0eeeff53ef4eae63142f26eb223a35cc99537": {
+    "permissions": "rwd",
+    "namespaces": [
+      "__all__"
+    ]
+  },
+  "a91c...": {
+    "permissions": "r",
+    "namespaces": [
+      "ns1",
+      "ns2"
+    ]
+  }
+}
 ```
 
 ---
+
+# Token format
+
+* Input token: raw string (Bearer token)
+* Storage: SHA256(token)
+* Lookup: exact match on hash key
+
+```text
+raw token -> SHA256 -> auth.json key
+```
+
+---
+
+# Permissions model
+
+Permissions are string-based flags:
+
+| Char | Meaning |
+| ---- | ------- |
+| r    | read    |
+| w    | write   |
+| d    | delete  |
+
+Example:
+
+```text
+"rwd" → full access
+"rw"  → read + write
+"r"   → read-only
+```
+
+---
+
+# Namespace model
+
+Each token is restricted to specific namespaces:
+
+```json
+"namespaces": ["ns1", "ns2"]
+```
+
+Special value:
+
+```json
+"__all__"
+```
+
+means:
+
+* full access to all namespaces
+* overrides list restriction
 
 ## Data Model
 
