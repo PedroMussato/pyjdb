@@ -4,6 +4,7 @@ from pathlib import Path
 from filelock import FileLock
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
+from typing import Any
 
 # =========================================================
 # CONFIGURATION
@@ -20,62 +21,68 @@ app = FastAPI()
 
 
 # =========================================================
-# AUTHENTICATION LAYER (SIMPLE FILE-BASED ALLOWLIST)
+# AUTHENTICATION LAYER (SIMPLE FILE-BASED ALLOWLIST FOR READ WRITE AND DELETE)
 # =========================================================
 
-
-def _hash_token(token: str) -> str:
-    """
-    Convert raw Bearer token (UUID) into SHA256 hash.
-    This is what is stored in keys.txt.
-    """
+def _hash_token(token: str) -> str: 
+    """ 
+    Convert raw Bearer token (UUID) into SHA256 hash. 
+    
+    This is what is stored in keys.txt. 
+    
+    """ 
+    
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-def is_valid_token(token: str) -> bool:
-    """
-    Validate token against allowlist stored in keys.txt.
-
-    - Reads file on every request (no cache)
-    - Compares SHA256(token) against each line in file
-    """
-    if not KEYS_FILE.exists():
-        return False
-
-    hashed = _hash_token(token)
-
-    # Linear scan of file (simple, but O(n))
-    with KEYS_FILE.open("r", encoding="utf-8") as f:
-        for line in f:
-            if line.strip() == hashed:
-                return True
-
-    return False
-
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    """
-    Global authentication middleware.
-
-    Blocks all requests except explicitly allowed ones.
-    """
-
-    # Extract Authorization header
     auth = request.headers.get("authorization")
 
     if not auth or not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing token")
 
-    # Extract raw token from header
-    token = auth.split(" ", 1)[1]
+    token = auth.split(" ", 1)[1].strip()
+    path = _path("config", "auth")
 
-    # Validate token against keys file
-    if not is_valid_token(token):
+    with _lock(path):
+        data = _load(path)
+    
+    token_hashed = _hash_token(token)    
+    token_data = data.get(token_hashed)
+
+    if token_data is None:
         raise HTTPException(status_code=403, detail="Invalid token")
 
-    return await call_next(request)
+    method = request.method
 
+    if method == "GET":
+        required = "r"
+    elif method in ("POST", "PUT", "PATCH"):
+        required = "w"
+    elif method == "DELETE":
+        required = "d"
+    else:
+        raise HTTPException(status_code=405, detail="Method not allowed")
+
+    parts = request.url.path.strip("/").split("/")
+
+    if len(parts) < 2:
+        raise HTTPException(status_code=400, detail="Missing namespace")
+
+    namespace = parts[1]
+
+    if required not in token_data.get("permissions", ""):
+        raise HTTPException(status_code=403, detail="Insufficient permission")
+
+    namespaces = token_data.get("namespaces", [])
+
+    if namespace not in namespaces and "__all__" not in namespaces:
+        raise HTTPException(status_code=403, detail="Namespace forbidden")
+
+    request.state.token = token
+    request.state.namespaces = namespaces
+
+    return await call_next(request)
 
 # =========================================================
 # INTERNAL STORAGE LAYER (FILE-BASED JSON DATABASE)
@@ -100,6 +107,7 @@ def _load(path: Path) -> dict:
     If file is corrupted → return empty dict (fail-safe behavior).
     """
     if not path.exists():
+
         return {}
 
     try:
