@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   pyjdb:
     build: .
@@ -18,9 +16,6 @@ services:
     # persistency
     volumes:
       # database files (namespace/document JSONs)
-      - ./db_data/:/app/data
-
-      # auth keys allowlist
-      - ./db_config/:/app/config
+      - ./data/:/app/data
 
     working_dir: /app
