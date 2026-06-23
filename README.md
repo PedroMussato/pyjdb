@@ -48,32 +48,35 @@ namespace → document → JSON key-value store
 
 ## Benchmark on my machine (macbook air m3)
 ```
-Duration:              67.82s
-Concurrent Workers:    150
+============================================================
+LOAD TEST RESULTS
+============================================================
+Duration:              61.88s
+Concurrent Workers:    100
 Namespaces:            80
 Documents/Namespace:   80
 Total Documents:       6400
-Total Requests:        63000
-Requests/sec:          928.92
+Total Requests:        84000
+Requests/sec:          1357.54
 Error Rate:            0.00%
 
 Operations:
-  POST       21000
-  GET        21000
-  DELETE     21000
+  POST       28000
+  GET        28000
+  DELETE     28000
 
 Latency (ms)
-  Min:      8.71
-  Avg:      161.23
-  Median:   162.84
-  P90:      195.57
-  P95:      206.09
-  P99:      241.95
-  Max:      444.11
+  Min:      2.46
+  Avg:      73.45
+  Median:   73.58
+  P90:      96.77
+  P95:      103.48
+  P99:      119.41
+  Max:      189.96
 
 Status Codes:
-  200: 62997
-  500: 3
+  200: 84000
+============================================================
 ```
 
 ---
