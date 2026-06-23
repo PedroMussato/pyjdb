@@ -4,15 +4,15 @@ import statistics
 import time
 from collections import Counter
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = "http://127.0.0.1:8001"
 TOKEN = "BE58FB0A-2D91-48C2-93ED-600FB16E021A"
 
-NS = "ns1"
-DOC = "doc1"
-
 DURATION = 60
-CONCURRENT_WORKERS = 200
-TIMEOUT = 1 
+CONCURRENT_WORKERS = 250
+TIMEOUT = 1
+
+NUM_NAMESPACES = 10
+NUM_DOCUMENTS = 10
 
 latencies = []
 status_codes = Counter()
@@ -29,6 +29,7 @@ def percentile(values, pct):
         return 0
 
     values = sorted(values)
+
     k = (len(values) - 1) * (pct / 100)
     f = int(k)
     c = min(f + 1, len(values) - 1)
@@ -71,8 +72,11 @@ async def perform_request(session, method, url, payload=None):
         status_codes["EXCEPTION"] += 1
 
 
-async def worker(session):
+async def worker(session, worker_id):
     global start_time
+
+    ns = f"ns{worker_id % NUM_NAMESPACES}"
+    doc = f"doc{(worker_id // NUM_NAMESPACES) % NUM_DOCUMENTS}"
 
     while True:
 
@@ -82,7 +86,7 @@ async def worker(session):
         for i in range(20):
             key = f"key{i}"
 
-            url = f"{BASE_URL}/item/{NS}/{DOC}/{key}"
+            url = f"{BASE_URL}/item/{ns}/{doc}/{key}"
 
             await perform_request(
                 session,
@@ -95,7 +99,7 @@ async def worker(session):
         for i in range(20):
             key = f"key{i}"
 
-            url = f"{BASE_URL}/item/{NS}/{DOC}/{key}"
+            url = f"{BASE_URL}/item/{ns}/{doc}/{key}"
 
             await perform_request(
                 session,
@@ -107,7 +111,7 @@ async def worker(session):
         for i in range(20):
             key = f"key{i}"
 
-            url = f"{BASE_URL}/item/{NS}/{DOC}/{key}"
+            url = f"{BASE_URL}/item/{ns}/{doc}/{key}"
 
             await perform_request(
                 session,
@@ -140,8 +144,8 @@ async def main():
         start_time = time.time()
 
         tasks = [
-            asyncio.create_task(worker(session))
-            for _ in range(CONCURRENT_WORKERS)
+            asyncio.create_task(worker(session, i))
+            for i in range(CONCURRENT_WORKERS)
         ]
 
         await asyncio.gather(*tasks)
@@ -155,9 +159,12 @@ async def main():
 
     print(f"Duration:              {runtime:.2f}s")
     print(f"Concurrent Workers:    {CONCURRENT_WORKERS}")
+    print(f"Namespaces:            {NUM_NAMESPACES}")
+    print(f"Documents/Namespace:   {NUM_DOCUMENTS}")
+    print(f"Total Documents:       {NUM_NAMESPACES * NUM_DOCUMENTS}")
     print(f"Total Requests:        {total_requests}")
-    print(f"Requests/sec:          {total_requests/runtime:.2f}")
-    print(f"Error Rate:            {(total_errors/max(total_requests,1))*100:.2f}%")
+    print(f"Requests/sec:          {total_requests / runtime:.2f}")
+    print(f"Error Rate:            {(total_errors / max(total_requests, 1)) * 100:.2f}%")
 
     print()
 
@@ -172,9 +179,9 @@ async def main():
         print(f"  Min:      {min(latencies):.2f}")
         print(f"  Avg:      {statistics.mean(latencies):.2f}")
         print(f"  Median:   {statistics.median(latencies):.2f}")
-        print(f"  P90:      {percentile(latencies,90):.2f}")
-        print(f"  P95:      {percentile(latencies,95):.2f}")
-        print(f"  P99:      {percentile(latencies,99):.2f}")
+        print(f"  P90:      {percentile(latencies, 90):.2f}")
+        print(f"  P95:      {percentile(latencies, 95):.2f}")
+        print(f"  P99:      {percentile(latencies, 99):.2f}")
         print(f"  Max:      {max(latencies):.2f}")
 
     print()
