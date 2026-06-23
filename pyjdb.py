@@ -19,6 +19,11 @@ KEYS_FILE = Path("config/keys.txt")
 # FastAPI application instance
 app = FastAPI()
 
+# =========================================================
+# GLOBAL STATE
+# =========================================================
+
+_lock_registry = {}   # <- HERE
 
 # =========================================================
 # AUTHENTICATION LAYER (SIMPLE FILE-BASED ALLOWLIST FOR READ WRITE AND DELETE)
@@ -100,45 +105,32 @@ def _path(namespace: str, document: str) -> Path:
 
 
 def _load(path: Path) -> dict:
-    """
-    Load JSON file into Python dict.
-
-    If file does not exist → return empty dict.
-    If file is corrupted → return empty dict (fail-safe behavior).
-    """
     if not path.exists():
-
         return {}
 
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
     except json.JSONDecodeError:
         return {}
 
-
 def _save(path: Path, data: dict):
-    """
-    Save Python dict to JSON file.
-
-    WARNING:
-    - This overwrites the entire file.
-    - No partial updates.
-    """
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp = path.with_suffix(".tmp")
 
+    with tmp.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    tmp.replace(path)
 
 def _lock(path: Path):
-    """
-    File lock to prevent concurrent writes corruption.
+    key = str(path) + ".lock"
 
-    Note:
-    - Only protects write operations
-    - Does NOT protect read performance
-    """
-    return FileLock(str(path) + ".lock")
+    if key not in _lock_registry:
+        _lock_registry[key] = FileLock(key)
 
+    return _lock_registry[key]
 
 # =========================================================
 # CORE DATABASE OPERATIONS
