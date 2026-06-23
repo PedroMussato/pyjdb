@@ -5,6 +5,7 @@ from filelock import FileLock
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 from typing import Any
+from datetime import datetime
 
 # =========================================================
 # CONFIGURATION
@@ -23,23 +24,44 @@ app = FastAPI()
 # GLOBAL STATE
 # =========================================================
 
-_lock_registry = {}   # <- HERE
+_lock_registry = {}  # <- HERE
+_token_registry = {}  # <- HERE
 
 # =========================================================
 # AUTHENTICATION LAYER (SIMPLE FILE-BASED ALLOWLIST FOR READ WRITE AND DELETE)
 # =========================================================
 
-def _hash_token(token: str) -> str: 
-    """ 
-    Convert raw Bearer token (UUID) into SHA256 hash. 
-    
-    This is what is stored in keys.txt. 
-    
-    """ 
-    
+
+def _hash_token(token: str) -> str:
+    """
+    Convert raw Bearer token (UUID) into SHA256 hash.
+
+    This is what is stored in keys.txt.
+
+    """
+
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-@app.middleware("http")
+
+def return_token(token):
+    if (
+        token in _token_registry
+        and _token_registry["last"] - int(datetime.now().timestamp()) > 60
+    ):
+        data = _token_registry
+    else:
+        path = _path("config", "auth")
+
+        with _lock(path):
+            data = _load(path)
+
+        _token_registry = data
+        _token_registry["last"] = int(datetime.now().timestamp())
+
+    token_hashed = _hash_token(token)
+    return data.get(token_hashed) @ app.middleware("http")
+
+
 async def auth_middleware(request: Request, call_next):
     auth = request.headers.get("authorization")
 
@@ -47,13 +69,7 @@ async def auth_middleware(request: Request, call_next):
         raise HTTPException(status_code=401, detail="Missing token")
 
     token = auth.split(" ", 1)[1].strip()
-    path = _path("config", "auth")
-
-    with _lock(path):
-        data = _load(path)
-    
-    token_hashed = _hash_token(token)    
-    token_data = data.get(token_hashed)
+    token_data = data.get(token)
 
     if token_data is None:
         raise HTTPException(status_code=403, detail="Invalid token")
@@ -89,6 +105,7 @@ async def auth_middleware(request: Request, call_next):
 
     return await call_next(request)
 
+
 # =========================================================
 # INTERNAL STORAGE LAYER (FILE-BASED JSON DATABASE)
 # =========================================================
@@ -114,6 +131,7 @@ def _load(path: Path) -> dict:
     except json.JSONDecodeError:
         return {}
 
+
 def _save(path: Path, data: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -124,6 +142,7 @@ def _save(path: Path, data: dict):
 
     tmp.replace(path)
 
+
 def _lock(path: Path):
     key = str(path) + ".lock"
 
@@ -131,6 +150,7 @@ def _lock(path: Path):
         _lock_registry[key] = FileLock(key)
 
     return _lock_registry[key]
+
 
 # =========================================================
 # CORE DATABASE OPERATIONS
