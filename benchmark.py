@@ -4,7 +4,7 @@ import statistics
 import time
 from collections import Counter
 
-BASE_URL = "http://127.0.0.1:8001"
+BASE_URL = "http://127.0.0.1:8000"
 TOKEN = "BE58FB0A-2D91-48C2-93ED-600FB16E021A"
 
 DURATION = 60
