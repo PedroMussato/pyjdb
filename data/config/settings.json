@@ -1,0 +1,8 @@
+{
+    "auth":{
+        "cache":true
+    },
+    "data":{
+        "cache":true
+    }
+}
