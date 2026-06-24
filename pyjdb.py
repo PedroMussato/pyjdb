@@ -4,7 +4,6 @@ from pathlib import Path
 from filelock import FileLock
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
-from typing import Any
 from datetime import datetime
 from collections import OrderedDict
 from threading import RLock
@@ -48,7 +47,7 @@ _lock_registry = {}
 
 def _hash_token(token: str) -> str:
     """
-    Converts a raw authentication token into a SHA-256 hash.
+    Converts a raw authentication token into an SHA-256 hash.
 
     This ensures that tokens stored in configuration files are not stored in plaintext.
     The resulting hash is compared against stored values in the auth configuration.
@@ -356,7 +355,7 @@ def read_item(namespace: str, document: str, key: str):
 
     Flow:
     - Check cache first
-    - If miss, load from disk under lock
+    - If missed, load from disk under lock
     - Store in cache
     - Return value for given key
     """
