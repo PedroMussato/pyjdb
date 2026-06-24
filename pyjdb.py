@@ -6,6 +6,8 @@ from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 from typing import Any
 from datetime import datetime
+from collections import OrderedDict
+from threading import RLock
 
 # =========================================================
 # CONFIGURATION
@@ -20,12 +22,17 @@ KEYS_FILE = Path("config/keys.txt")
 # FastAPI application instance
 app = FastAPI()
 
+_CACHE = OrderedDict()
+_CACHE_LOCK = RLock()
+CACHE_MAX_SIZE = 10_000
+
+
 # =========================================================
 # GLOBAL STATE
 # =========================================================
 
-_lock_registry = {}  # <- HERE
-_token_registry = {}  # <- HERE
+_lock_registry = {}  
+_token_registry = {}  
 
 # =========================================================
 # AUTHENTICATION LAYER (SIMPLE FILE-BASED ALLOWLIST FOR READ WRITE AND DELETE)
@@ -42,25 +49,42 @@ def _hash_token(token: str) -> str:
 
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+_TOKEN_CACHE = None
+_TOKEN_CACHE_TS = 0
+_TOKEN_CACHE_LOCK = RLock()
+TOKEN_TTL = 60
 
-def return_token(token):
-    if (
-        token in _token_registry
-        and _token_registry["last"] - int(datetime.now().timestamp()) > 60
-    ):
-        data = _token_registry
+
+def return_token(token: str):
+    global _TOKEN_CACHE, _TOKEN_CACHE_TS
+
+    now = int(datetime.now().timestamp())
+    token_hashed = _hash_token(token)
+
+    use_cache = settings["auth"]["cache"]
+
+    if use_cache:
+        with _TOKEN_CACHE_LOCK:
+            if (
+                _TOKEN_CACHE is not None
+                and (now - _TOKEN_CACHE_TS) < TOKEN_TTL
+            ):
+                data = _TOKEN_CACHE
+            else:
+                path = _path("config", "auth")
+
+                with _lock(path):
+                    data = _load(path)
+
+                _TOKEN_CACHE = data
+                _TOKEN_CACHE_TS = now
     else:
         path = _path("config", "auth")
 
         with _lock(path):
             data = _load(path)
 
-        _token_registry = data
-        _token_registry["last"] = int(datetime.now().timestamp())
-
-    token_hashed = _hash_token(token)
-    return data.get(token_hashed) @ app.middleware("http")
-
+    return data.get(token_hashed)
 
 async def auth_middleware(request: Request, call_next):
     auth = request.headers.get("authorization")
@@ -111,6 +135,28 @@ async def auth_middleware(request: Request, call_next):
 # =========================================================
 
 
+def _cache_get(cache_key):
+    if not settings["data"]["cache"]:
+        return None
+
+    with _CACHE_LOCK:
+        if cache_key not in _CACHE:
+            return None
+        _CACHE.move_to_end(cache_key)
+        return _CACHE[cache_key]
+
+
+def _cache_set(cache_key, value):
+    if not settings["data"]["cache"]:
+        return
+
+    with _CACHE_LOCK:
+        _CACHE[cache_key] = value
+        _CACHE.move_to_end(cache_key)
+
+        if len(_CACHE) > CACHE_MAX_SIZE:
+            _CACHE.popitem(last=False)
+
 def _path(namespace: str, document: str) -> Path:
     """
     Build file path for a document.
@@ -153,66 +199,65 @@ def _lock(path: Path):
 
 
 # =========================================================
+# LOADING SETTINGS
+# =========================================================
+
+settings_path = _path("config", "settings")
+settings = _load(settings_path)
+
+# =========================================================
 # CORE DATABASE OPERATIONS
 # =========================================================
 
 
 def write_item(namespace: str, document: str, key: str, value):
-    """
-    Write a single key-value into a JSON document.
-
-    Flow:
-    1. Acquire file lock
-    2. Load full JSON file
-    3. Modify in memory
-    4. Rewrite entire file
-    """
+    cache_key = (namespace, document)
     path = _path(namespace, document)
     lock = _lock(path)
 
     with lock:
-        data = _load(path)
+        data = _cache_get(cache_key)
+
+        if data is None:
+            data = _load(path)
+
         data[key] = value
         _save(path, data)
 
+    # atualiza cache sem invalidar
+    _cache_set(cache_key, data)
 
 def read_item(namespace: str, document: str, key: str):
-    """
-    Read a single key from a JSON document.
+    cache_key = (namespace, document)
 
-    Flow:
-    1. Acquire file lock
-    2. Load full JSON file
-    3. Return key value
-    """
-    path = _path(namespace, document)
-    lock = _lock(path)
+    data = _cache_get(cache_key)
 
-    with lock:
-        data = _load(path)
-        return data.get(key)
+    if data is None:
+        path = _path(namespace, document)
+        lock = _lock(path)
 
+        with lock:
+            data = _load(path)
+
+        _cache_set(cache_key, data)
+
+    return data.get(key)
 
 def delete_item(namespace: str, document: str, key: str):
-    """
-    Delete a key from a document.
-
-    IMPORTANT:
-    - This is a full-file rewrite operation (same as write_item)
-    - There is no partial delete in JSON file storage
-    """
+    cache_key = (namespace, document)
     path = _path(namespace, document)
     lock = _lock(path)
 
     with lock:
-        data = _load(path)
+        data = _cache_get(cache_key)
 
-        # remove key if exists
-        if key in data:
-            del data[key]
+        if data is None:
+            data = _load(path)
 
+        data.pop(key, None)
         _save(path, data)
 
+    _cache_set(cache_key, data)
 
 # =========================================================
 # API MODELS
