@@ -51,31 +51,31 @@ namespace → document → JSON key-value store
 ============================================================
 LOAD TEST RESULTS
 ============================================================
-Duration:              61.88s
+Duration:              62.06s
 Concurrent Workers:    100
 Namespaces:            80
 Documents/Namespace:   80
 Total Documents:       6400
-Total Requests:        84000
-Requests/sec:          1357.54
+Total Requests:        130620
+Requests/sec:          2104.83
 Error Rate:            0.00%
 
 Operations:
-  POST       28000
-  GET        28000
-  DELETE     28000
+  POST       43540
+  GET        43540
+  DELETE     43540
 
 Latency (ms)
-  Min:      2.46
-  Avg:      73.45
-  Median:   73.58
-  P90:      96.77
-  P95:      103.48
-  P99:      119.41
-  Max:      189.96
+  Min:      0.97
+  Avg:      47.21
+  Median:   49.54
+  P90:      68.44
+  P95:      75.52
+  P99:      111.05
+  Max:      330.70
 
 Status Codes:
-  200: 84000
+  200: 130620
 ============================================================
 ```
 
