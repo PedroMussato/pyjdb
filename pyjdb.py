@@ -15,9 +15,6 @@ from threading import RLock
 # Root directory where all namespaces/documents are persisted as JSON files
 ROOT = "data"
 
-# Path to file that would contain allowed authentication tokens (SHA256 hashes expected)
-KEYS_FILE = Path("config/keys.txt")
-
 # FastAPI application instance (entrypoint of HTTP API)
 app = FastAPI()
 
