@@ -129,21 +129,25 @@ docker compose up -d
 
 ```json
 {
-  "auth": {
-    "cache": true
-  },
-  "data": {
-    "cache": true
-  }
+    "auth":{
+        "cache":true,
+        "cache_token_ttl":60
+    },
+    "data":{
+        "cache":true,
+        "cache_max_size":10000
+    }
 }
 ```
 
 Options:
 
-| Setting    | Description                  |
-| ---------- | ---------------------------- |
-| auth.cache | Enables authentication cache |
-| data.cache | Enables document cache       |
+| Setting              | Description                                |
+| -------------------- | ------------------------------------------ |
+| auth.cache           | Enables authentication cache               |
+| data.cache           | Enables document cache                     |
+| auth.cache_token_ttl | how long will live the auth token in cache |
+| data.cache_max_size  | maximum size of the LRU cache              |
 
 ---
 
