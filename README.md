@@ -19,7 +19,7 @@ PyJDB stores data as JSON files on disk, provides REST endpoints for CRUD operat
 
 ---
 
-## Performance
+## Performance (local test on baseline Macbook Air M3)
 
 ```text
 ============================================================
