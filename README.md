@@ -19,6 +19,40 @@ PyJDB stores data as JSON files on disk, provides REST endpoints for CRUD operat
 
 ---
 
+## Performance
+
+```text
+============================================================
+LOAD TEST RESULTS
+============================================================
+Duration:              62.06s
+Concurrent Workers:    100
+Namespaces:            80
+Documents/Namespace:   80
+Total Documents:       6400
+Total Requests:        130620
+Requests/sec:          2104.83
+Error Rate:            0.00%
+
+Operations:
+  POST       43540
+  GET        43540
+  DELETE     43540
+
+Latency (ms)
+  Min:      0.97
+  Avg:      47.21
+  Median:   49.54
+  P90:      68.44
+  P95:      75.52
+  P99:      111.05
+  Max:      330.70
+
+Status Codes:
+  200: 130620
+```
+
+---
 ## Architecture
 
 ```text
