@@ -18,18 +18,6 @@ ROOT = "data"
 # FastAPI application instance (entrypoint of HTTP API)
 app = FastAPI()
 
-# In-memory LRU cache for document-level data
-# Key: (namespace, document)
-# Value: dict loaded from JSON file
-_CACHE = OrderedDict()
-
-# Mutex protecting _CACHE from concurrent access across threads
-_CACHE_LOCK = RLock()
-
-# Maximum number of cached documents before eviction (LRU policy)
-CACHE_MAX_SIZE = 10_000
-
-
 # =========================================================
 # GLOBAL STATE
 # =========================================================
@@ -51,21 +39,6 @@ def _hash_token(token: str) -> str:
     """
 
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
-
-
-# Cached authentication data (in-memory)
-# Stores loaded token authorization mapping to reduce disk reads
-_TOKEN_CACHE = None
-
-# Timestamp of last authentication cache refresh (unix epoch seconds)
-_TOKEN_CACHE_TS = 0
-
-# Lock protecting token cache updates
-_TOKEN_CACHE_LOCK = RLock()
-
-# Time-to-live for authentication cache in seconds
-TOKEN_TTL = 60
-
 
 def return_token(token: str):
     """
@@ -312,6 +285,29 @@ settings_path = _path("config", "settings")
 # Global runtime configuration loaded at startup
 settings = _load(settings_path)
 
+# In-memory LRU cache for document-level data
+# Key: (namespace, document)
+# Value: dict loaded from JSON file
+_CACHE = OrderedDict()
+
+# Mutex protecting _CACHE from concurrent access across threads
+_CACHE_LOCK = RLock()
+
+# Maximum number of cached documents before eviction (LRU policy)
+CACHE_MAX_SIZE = settings["data"]["cache_max_size"]
+
+# Cached authentication data (in-memory)
+# Stores loaded token authorization mapping to reduce disk reads
+_TOKEN_CACHE = None
+
+# Timestamp of last authentication cache refresh (unix epoch seconds)
+_TOKEN_CACHE_TS = 0
+
+# Lock protecting token cache updates
+_TOKEN_CACHE_LOCK = RLock()
+
+# Time-to-live for authentication cache in seconds
+TOKEN_TTL = settings["auth"]["cache_token_ttl"]
 
 # =========================================================
 # CORE DATABASE OPERATIONS
