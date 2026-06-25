@@ -1,8 +1,10 @@
 {
     "auth":{
-        "cache":true
+        "cache":true,
+        "cache_token_ttl":60
     },
     "data":{
-        "cache":true
+        "cache":true,
+        "cache_max_size",10000
     }
 }
