@@ -1,335 +1,416 @@
 # PyJDB
 
-A lightweight file-based NoSQL database exposed via HTTP API.
+A lightweight file-based key-value database built with FastAPI.
 
-It implements a minimal document store where each document is a JSON file and each document contains key-value pairs (items). Access is protected by a simple SHA256-based allowlist authentication mechanism.
-
----
-
-## Core Concept
-
-The system follows a simple hierarchy:
-
-```
-namespace → document → JSON key-value store
-```
-
-### Mapping
-
-* Namespace → directory
-* Document → JSON file
-* Item → key inside JSON object
-
----
+PyJDB stores data as JSON files on disk, provides REST endpoints for CRUD operations, supports token-based authentication, document caching, and safe concurrent access through file locking.
 
 ## Features
 
-* File-based document storage (JSON per document)
-* Write key-value pairs into documents (upsert behavior)
-* Read individual keys from documents
-* Delete keys from documents
-* Automatic document creation on first write (lazy creation)
-* File-level locking per document for write safety
-* Simple Bearer token authentication via SHA256 allowlist
-* Minimal FastAPI HTTP interface
-* No external database dependencies
+* File-based storage
+* REST API
+* Token authentication
+* Namespace-level authorization
+* Document-level LRU cache
+* Authentication cache
+* Atomic file writes
+* Cross-process file locking
+* No external database required
+* Human-readable JSON persistence
 
 ---
 
-## Tech Stack
+## Architecture
 
-* Python 3.10+
-* FastAPI
-* Uvicorn
-* Filelock
-* Pydantic
-
----
-
-## Benchmark on my machine (macbook air m3)
+```text
+HTTP Request
+     ↓
+Authentication Middleware
+     ↓
+API Endpoint
+     ↓
+Storage Layer
+     ↓
+JSON Document
 ```
-============================================================
-LOAD TEST RESULTS
-============================================================
-Duration:              62.06s
-Concurrent Workers:    100
-Namespaces:            80
-Documents/Namespace:   80
-Total Documents:       6400
-Total Requests:        130620
-Requests/sec:          2104.83
-Error Rate:            0.00%
 
-Operations:
-  POST       43540
-  GET        43540
-  DELETE     43540
+Storage layout:
 
-Latency (ms)
-  Min:      0.97
-  Avg:      47.21
-  Median:   49.54
-  P90:      68.44
-  P95:      75.52
-  P99:      111.05
-  Max:      330.70
+```text
+data/
+├── config/
+│   ├── settings.json
+│   └── auth.json
+├── users/
+│   └── profile.json
+└── inventory/
+    └── products.json
+```
 
-Status Codes:
-  200: 130620
-============================================================
+Each document is a JSON file.
+
+Example:
+
+```json
+{
+  "name": "Pedro",
+  "email": "pedro@example.com"
+}
 ```
 
 ---
 
 ## Installation
 
+### Requirements
+
+* Python 3.10+
+* FastAPI
+* Uvicorn
+* FileLock
+
+### Install dependencies
+
 ```bash
-pip3 install -r requirements.txt
+pip install fastapi uvicorn filelock
+```
+
+### Start server
+
+```bash
+uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
 ---
 
-## Running the API
+## Configuration
 
-```bash
-uvicorn pyjdb:app --reload
-```
-
-Server runs at:
-
-```
-http://127.0.0.1:8000
-```
-
----
-
-## Authentication Model
-
-All requests (except optional health endpoints) require authentication.
-
-### THE KEY PRESENT IN THE LOAD TEST AND THE SHA PRESENT IN THE KEYS.TXT FILE IN THIS REPO IS JUST AN EXAMPLE CHANGE IT FOR PRODUCTION ENVIRONMENTS.
-
-### Flow
-
-* Client sends a Bearer token (UUID)
-* Server computes SHA256(token)
-* Server checks if hash exists in `config/keys.txt`
-* If found → request allowed
-* If not found → request rejected
-
-### Example header
-
-```http
-Authorization: Bearer <uuid-token>
-```
-
-# auth.json format
-
-Authentication data is stored in a JSON file keyed by **SHA256(token)**.
-
-Each key maps to a permission + namespace policy.
+### settings.json
 
 ```json
 {
-  "b62f95843bdc08c0ddaca9ca43f0eeeff53ef4eae63142f26eb223a35cc99537": {
-    "permissions": "rwd",
-    "namespaces": [
-      "__all__"
-    ]
+  "auth": {
+    "cache": true
   },
-  "a91c...": {
-    "permissions": "r",
-    "namespaces": [
-      "ns1",
-      "ns2"
-    ]
+  "data": {
+    "cache": true
   }
 }
 ```
 
+Options:
+
+| Setting    | Description                  |
+| ---------- | ---------------------------- |
+| auth.cache | Enables authentication cache |
+| data.cache | Enables document cache       |
+
 ---
 
-# Token format
+## Authentication
 
-* Input token: raw string (Bearer token)
-* Storage: SHA256(token)
-* Lookup: exact match on hash key
+Authentication uses SHA-256 hashed tokens.
 
-```text
-raw token -> SHA256 -> auth.json key
+Clients send:
+
+```http
+Authorization: Bearer YOUR_TOKEN
 ```
 
----
+The server hashes the token and compares it against entries stored in:
 
-# Permissions model
-
-Permissions are string-based flags:
-
-| Char | Meaning |
-| ---- | ------- |
-| r    | read    |
-| w    | write   |
-| d    | delete  |
+```text
+data/config/auth.json
+```
 
 Example:
 
-```text
-"rwd" → full access
-"rw"  → read + write
-"r"   → read-only
-```
-
----
-
-# Namespace model
-
-Each token is restricted to specific namespaces:
-
 ```json
-"namespaces": ["ns1", "ns2"]
+{
+  "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918": {
+    "permissions": "rwd",
+    "namespaces": ["users"]
+  }
+}
 ```
 
-Special value:
+### Permissions
 
-```json
-"__all__"
-```
+| Permission | Description |
+| ---------- | ----------- |
+| r          | Read        |
+| w          | Write       |
+| d          | Delete      |
 
-means:
+### Namespace Restrictions
 
-* full access to all namespaces
-* overrides list restriction
-
-## Data Model
-
-Each document is stored as a JSON file:
+Example:
 
 ```json
 {
-  "key1": "value1",
-  "key2": "value2"
+  "permissions": "rw",
+  "namespaces": ["users"]
+}
+```
+
+Allows access only to:
+
+```text
+/item/users/*
+```
+
+Global access:
+
+```json
+{
+  "permissions": "rwd",
+  "namespaces": ["__all__"]
 }
 ```
 
 ---
 
-## API Endpoints
+## API
 
----
+### Write Value
 
-### Write Item (Upsert)
-
-Creates or updates a key inside a document.
-
-```
+```http
 POST /item/{namespace}/{document}/{key}
 ```
 
-Request body:
+Request:
 
 ```json
 {
-  "value": "any JSON serializable value"
+  "value": "Pedro"
 }
 ```
 
-Behavior:
+Example:
 
-* If key exists → overwrite value
-* If key does not exist → create key
-* If document does not exist → created implicitly
-
----
-
-### Read Item
-
-Reads a key from a document.
-
-```
-GET /item/{namespace}/{document}/{key}
+```bash
+curl -X POST \
+  http://localhost:8000/item/users/profile/name \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"value":"Pedro"}'
 ```
 
 Response:
 
 ```json
 {
-  "key": "key1",
-  "value": "value1"
-}
-```
-
-If key does not exist:
-
-```json
-{
-  "key": "missing",
-  "value": null
+  "status": "ok",
+  "action": "write"
 }
 ```
 
 ---
 
-### Delete Item
+### Read Value
 
-Removes a key from a document.
-
+```http
+GET /item/{namespace}/{document}/{key}
 ```
+
+Example:
+
+```bash
+curl \
+  http://localhost:8000/item/users/profile/name \
+  -H "Authorization: Bearer TOKEN"
+```
+
+Response:
+
+```json
+{
+  "key": "name",
+  "value": "Pedro"
+}
+```
+
+---
+
+### Delete Value
+
+```http
 DELETE /item/{namespace}/{document}/{key}
+```
+
+Example:
+
+```bash
+curl -X DELETE \
+  http://localhost:8000/item/users/profile/name \
+  -H "Authorization: Bearer TOKEN"
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "action": "delete"
+}
+```
+
+---
+
+## Caching
+
+### Authentication Cache
+
+Authentication data is cached in memory to reduce disk reads.
+
+Default TTL:
+
+```python
+TOKEN_TTL = 60
 ```
 
 Behavior:
 
-* If key exists → removed
-* If key does not exist → no-op
-
----
-
-## Example Usage
-
----
-
-### Write item
-
-```bash
-curl -X POST http://127.0.0.1:8000/item/ns1/doc1/user \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"value": {"name": "Pedro"}}'
+```text
+Request
+  ↓
+Valid cache?
+ ├─ Yes → Use memory
+ └─ No  → Reload auth.json
 ```
 
 ---
 
-### Read item
+### Document Cache
 
-```bash
-curl http://127.0.0.1:8000/item/ns1/doc1/user \
-  -H "Authorization: Bearer <token>"
+Documents are cached using an LRU (Least Recently Used) policy.
+
+Default size:
+
+```python
+CACHE_MAX_SIZE = 10000
+```
+
+Cache key:
+
+```python
+(namespace, document)
+```
+
+When the cache reaches its limit, the least recently used document is evicted.
+
+---
+
+## Concurrency
+
+### File Locking
+
+Every document uses a dedicated lock file.
+
+Example:
+
+```text
+data/users/profile.json.lock
+```
+
+This prevents:
+
+* Concurrent writes
+* Partial updates
+* Data corruption
+
+The implementation uses FileLock, allowing synchronization across multiple processes.
+
+---
+
+## Atomic Writes
+
+Writes are performed atomically.
+
+Instead of overwriting directly:
+
+```text
+profile.json
+```
+
+The system writes:
+
+```text
+profile.tmp
+```
+
+Then atomically replaces:
+
+```text
+profile.json
+```
+
+This reduces corruption risks during crashes or unexpected shutdowns.
+
+---
+
+## Data Model
+
+The database follows a simple hierarchy:
+
+```text
+namespace
+    ↓
+document
+    ↓
+key
+    ↓
+value
+```
+
+Example:
+
+```text
+users
+ └── profile
+      └── name = Pedro
+```
+
+Stored as:
+
+```json
+{
+  "name": "Pedro"
+}
 ```
 
 ---
 
-### Delete item
+## Performance Characteristics
 
-```bash
-curl -X DELETE http://127.0.0.1:8000/item/ns1/doc1/user \
-  -H "Authorization: Bearer <token>"
+### Read
+
+Cache hit:
+
+```text
+O(1)
 ```
 
----
+Cache miss:
 
-## Concurrency Model
+```text
+O(document_size)
+```
 
-* File-level locking per document
-* Prevents concurrent write corruption
-* Reads are also locked to avoid reading inconsistent write states
-* Lock granularity: per document file
+### Write
 
----
+```text
+O(document_size)
+```
 
-## Security Model
+Entire documents are loaded and rewritten on each modification.
 
-* Stateless authentication
-* SHA256-based token validation
-* Allowlist stored in `keys.txt`
-* No token generation endpoint exposed
-* No dynamic key issuance via API
+This design works well for:
+
+* Multiple namespaces
+* Multiple documents
+* Each document having up to 5 MB < 5 million characters
+
+It is not intended:
+
+* large-scale datasets
+* high-write workloads
