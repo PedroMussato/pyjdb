@@ -105,13 +105,19 @@ Example:
 ### Install dependencies
 
 ```bash
-pip install fastapi uvicorn filelock
+pip install -r requirements.txt
 ```
 
 ### Start server
 
 ```bash
 uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+### Docker alternative
+This will build and run the server
+```bash
+docker compose up -d
 ```
 
 ---
