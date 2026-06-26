@@ -40,6 +40,7 @@ def _hash_token(token: str) -> str:
 
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
+
 def return_token(token: str):
     """
     Retrieves authentication metadata associated with a given token.
@@ -59,9 +60,6 @@ def return_token(token: str):
 
     # Current timestamp used for TTL validation
     now = int(datetime.now().timestamp())
-
-    # Convert raw token into stored hash format
-    token_hashed = _hash_token(token)
 
     # Whether authentication cache is enabled (controlled by runtime settings)
     use_cache = settings["auth"]["cache"]
@@ -92,7 +90,7 @@ def return_token(token: str):
             data = _load(path)
 
     # Return authentication entry mapped to hashed token
-    return data.get(token_hashed)
+    return data.get(_hash_token(token))
 
 
 async def auth_middleware(request: Request, call_next):
@@ -328,9 +326,8 @@ def write_item(namespace: str, document: str, key: str, value):
 
     cache_key = (namespace, document)
     path = _path(namespace, document)
-    lock = _lock(path)
 
-    with lock:
+    with _lock(path):
         data = _cache_get(cache_key)
 
         if data is None:
@@ -434,9 +431,7 @@ def api_read_item(namespace: str, document: str, key: str):
     API endpoint for reading a value from a document key.
     """
 
-    value = read_item(namespace, document, key)
-
-    return {"key": key, "value": value}
+    return {"key": key, "value": read_item(namespace, document, key)}
 
 
 @app.delete("/item/{namespace}/{document}/{key}")
